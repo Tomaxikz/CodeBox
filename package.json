@@ -1,0 +1,40 @@
+{
+  "name": "codebox",
+  "module": "src/app/main.ts",
+  "type": "module",
+  "private": true,
+  "scripts": {
+    "dev": "bun run src/app/main.ts",
+    "dev:frontend": "vite",
+    "build:frontend": "vite build",
+    "preview:frontend": "vite preview",
+    "typecheck": "tsgo --noEmit",
+    "check": "bun run typecheck",
+    "db:fresh": "bun run src/Commands/ClearDb.ts",
+    "migrate:make": "bun run src/Commands/MakeMigration.ts"
+  },
+  "devDependencies": {
+    "@tailwindcss/vite": "^4.2.4",
+    "@types/bun": "^1.3.13",
+    "@types/nodemailer": "^8.0.0",
+    "@types/react-dom": "^19.2.3",
+    "@typescript/native-preview": "^7.0.0-dev.20260505.1",
+    "@vitejs/plugin-react": "^6.0.1",
+    "drizzle-kit": "^0.31.10",
+    "tailwindcss": "^4.2.4"
+  },
+  "dependencies": {
+    "@types/react": "^19.2.14",
+    "drizzle": "^1.4.0",
+    "drizzle-orm": "^0.45.2",
+    "hono": "^4.12.17",
+    "nodemailer": "^8.0.7",
+    "react": "^19.2.6",
+    "react-dom": "^19.2.6",
+    "vite": "^8.0.11",
+    "zod": "^4.4.3"
+  },
+  "peerDependencies": {
+    "typescript": "^5"
+  }
+}
