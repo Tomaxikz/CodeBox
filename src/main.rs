@@ -2,6 +2,7 @@ mod routes;
 mod bootstrap;
 mod drivers;
 mod misc;
+mod app;
 
 #[tokio::main]
 async fn main() {

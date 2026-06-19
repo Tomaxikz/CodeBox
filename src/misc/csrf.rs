@@ -27,10 +27,11 @@ pub async fn csrf_guard(req: Request, next: Next) -> Result<Response, HttpError>
         .map(str::to_string);
 
     if is_safe_method(req.method()) {
-        let should_set_cookie = csrf_cookie
-            .as_deref()
-            .map(|token| !verify_csrf_token(token, &app_key))
-            .unwrap_or(true);
+        let should_set_cookie = match csrf_cookie.as_deref() {
+            Some(token) => !verify_csrf_token(token, app_key.as_str()),
+            None => true,
+        };
+        
         let mut response = next.run(req).await;
 
         if should_set_cookie {

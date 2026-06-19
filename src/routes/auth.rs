@@ -1,14 +1,7 @@
-use axum::{Router, extract::State, routing::get};
+use axum::{Router, routing::{post}};
 
-use crate::routes::SharedState;
+use crate::{app::controllers::api::http::auth::register_controller::register, routes::SharedState};
 
 pub fn router() -> Router<SharedState> {
-    Router::new().route("/health", get(health))
-}
-
-// Implement acutall auth routes once controllers are done
-async fn health(State(state): State<SharedState>) -> &'static str {
-    let _db = &state.db;
-
-    "OK"
+    Router::new().route("/health", post(register))
 }

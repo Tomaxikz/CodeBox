@@ -18,7 +18,7 @@ pub type SharedState = Arc<AppState>;
 
 pub fn router() -> Router<SharedState> {
     Router::new()
-        .nest("/api", api_router())
+        .nest("/api/auth", api_router())
         .layer(middleware::from_fn(log_request))
 }
 
