@@ -83,7 +83,7 @@ pub fn read_cookie<'a>(cookie_header: &'a str, name: &str) -> Option<&'a str> {
         })
 }
 
-fn build_cookie(
+pub fn build_cookie(
     name: &str,
     value: &str,
     options: CookieOptions<'_>,

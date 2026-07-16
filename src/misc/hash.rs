@@ -11,8 +11,13 @@ use argon2::{
     Params,
     Version,
 };
+use hmac::{Hmac, Mac};
 use rand::RngCore;
+use sha2::Sha256;
 
+use crate::misc::http_errors::HttpError;
+
+type HmacSha256 = Hmac<Sha256>;
 
 pub fn hash_password(password: &str, app_key: &str) -> Result<String> {
     let salt = generate_salt();
@@ -59,6 +64,18 @@ pub fn verify_password(password: &str, password_hash: &str, app_key: &str) -> Re
     Ok(argon2
         .verify_password(password.as_bytes(), &parsed_hash)
         .is_ok())
+}
+
+pub fn hash(value: &str) -> Result<String, HttpError> {
+    let app_key = std::env::var("APP_KEY")
+        .map_err(|_| HttpError::Internal("APP_KEY must be set".to_string()))?;
+
+    let mut mac = HmacSha256::new_from_slice(app_key.as_bytes())
+        .map_err(|_| HttpError::Internal("Failed to create HMAC".to_string()))?;
+
+    mac.update(value.as_bytes());
+
+    Ok(hex::encode(mac.finalize().into_bytes()))
 }
 
 fn generate_salt() -> SaltString {

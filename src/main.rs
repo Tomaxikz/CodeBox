@@ -18,4 +18,5 @@ async fn main() {
     if let Err(err) = bootstrap::init::init().await {
         tracing::error!("boot failed: {err}");
     }
+
 }

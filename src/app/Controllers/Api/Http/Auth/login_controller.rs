@@ -1,13 +1,32 @@
-use std::env;
-
-use axum::{Json, extract::State};
+use axum::{
+    extract::State,
+    http::{HeaderMap, header},
+    response::{IntoResponse, Response},
+    Json,
+};
+use base64::{Engine, engine::general_purpose::URL_SAFE_NO_PAD};
+use chrono::{DateTime, Duration, Utc};
+use hmac::{Hmac, Mac};
+use rand::TryRngCore;
 use serde::{Deserialize, Serialize};
+use sha2::Sha256;
+use uuid::Uuid;
 use validator::{Validate, ValidateEmail, ValidationError};
 
-use crate::{misc::{hash::{hash_password, verify_password}, http_errors::{HttpError, HttpResult}}, routes::SharedState};
+use crate::{
+    misc::{
+        cookies::{CookieOptions, SameSite::Lax, set_cookie},
+        hash::{hash, verify_password},
+        http_errors::{HttpError, HttpResult},
+    },
+    routes::SharedState,
+};
+
+
+type HmacSha256 = Hmac<Sha256>;
 
 #[derive(Debug, Deserialize, Validate)]
-struct LoginRequest {
+pub struct LoginRequest {
     #[validate(custom(function = "validate_login"))]
     login: Login,
 
@@ -15,8 +34,8 @@ struct LoginRequest {
     password: String,
 }
 
-#[derive(Debug, Deserialize)]
-struct LoginResponse {
+#[derive(Debug, Deserialize, Serialize)]
+pub struct LoginResponse {
     id: i64,
     email: String,
     username: String,
@@ -38,6 +57,17 @@ struct LoginUser {
     first_name: String,
     last_name: String,
     password_hash: String,
+}
+
+struct CookieValue {
+    id: Uuid,
+    user_id: i64,
+    token_hash: String,
+    user_agent: Option<String>,
+    ip_address: Option<String>,
+    created_at: DateTime<Utc>,
+    expires_at: DateTime<Utc>,
+    revoked_at: Option<DateTime<Utc>>,
 }
 
 fn validate_login(login: &Login) -> Result<(), ValidationError> {
@@ -68,10 +98,40 @@ impl LoginRequest {
     }
 }
 
+fn generate_token() -> String {
+    let mut token_bytes = [0u8; 32];
+    rand::rngs::OsRng
+        .try_fill_bytes(&mut token_bytes)
+        .expect("failed to generate secure random token");
+
+    URL_SAFE_NO_PAD.encode(token_bytes)
+}
+
+fn sign(username: &str, first_name: &str, last_name: &str) -> Result<String, HttpError>{
+    let app_key = std::env::var("APP_KEY")
+        .map_err(|_| HttpError::Internal("APP_KEY must be set".to_string()))?;
+
+    let mut mac = HmacSha256::new_from_slice(app_key.as_bytes())
+        .map_err(|_| HttpError::Internal("Failed to create token signature".to_string()))?;
+
+    let token = generate_token();
+
+    mac.update(username.as_bytes());
+    mac.update(first_name.as_bytes());
+    mac.update(last_name.as_bytes());
+    mac.update(token.as_bytes());
+
+    let signature = hex::encode(mac.finalize().into_bytes());
+
+    Ok(signature)
+}
+
+
 pub async fn login(
     State(state): State<SharedState>,
-    Json(payload): Json<LoginRequest>
-) -> HttpResult<Json<LoginResponse>> {
+    headers: HeaderMap,
+    Json(payload): Json<LoginRequest>,
+) -> HttpResult<Response> {
 
     payload.validate_request()?;
 
@@ -113,6 +173,49 @@ pub async fn login(
         return Err(HttpError::Unauthorized("Invalid credentials".to_string()));
     }
 
+    let token = sign(&user.username, &user.first_name, &user.last_name)?;
+    let hash_token = hash(&token)?;
+    let user_agent = headers
+        .get(header::USER_AGENT)
+        .and_then(|value| value.to_str().ok())
+        .map(str::to_owned);
+
+    let session_id = Uuid::new_v4();
+    let created_at = Utc::now();
+    let expires_at = created_at + Duration::days(1);
+
+    let _session = sqlx::query_as!(
+        CookieValue,
+        r#"
+        INSERT INTO sessions (
+            id,
+            user_id,
+            token_hash,
+            user_agent,
+            ip_address,
+            created_at,
+            expires_at,
+            revoked_at
+        )
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+        RETURNING id, user_id, token_hash, user_agent, ip_address, created_at, expires_at, revoked_at
+        "#,
+        session_id,
+        user.id,
+        hash_token,
+        user_agent,
+        Option::<String>::None,
+        created_at,
+        expires_at,
+        Option::<DateTime<Utc>>::None,
+    )
+    .fetch_one(&state.db)
+    .await
+    .map_err(|err| {
+        tracing::error!("Failed to create session: {err}");
+        HttpError::Internal("Failed to create session".to_string())
+    })?;
+
     let response = LoginResponse {
         id: user.id,
         email: user.email,
@@ -121,5 +224,19 @@ pub async fn login(
         last_name: user.last_name,
     };
 
-    Ok(Json(response))
+    let mut response = Json(response).into_response();
+
+    set_cookie(
+        &mut response,
+        "Test",
+        &token,
+        CookieOptions {
+            max_age: Some(60 * 60 * 24),
+            http_only: true,
+            same_site: Lax,
+            ..Default::default()
+        },
+    )?;
+
+    Ok(response)
 }
