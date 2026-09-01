@@ -1,5 +1,2 @@
-#[path = "Controllers/mod.rs"]
-pub mod controllers;
-
-#[path = "Middlewares/mod.rs"]
-pub mod middlewares;
+pub mod drivers;
+pub mod state;
