@@ -15,7 +15,7 @@ async fn main() -> anyhow::Result<()> {
         .init();
 
     let state = AppState::initialize().await?;
-    let app = Router::new().with_state(state);
+    let app = app::router::router().with_state(state);
 
     let address = SocketAddr::from(([0, 0, 0, 0], 3000));
 
